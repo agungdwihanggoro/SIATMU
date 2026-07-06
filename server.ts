@@ -217,194 +217,219 @@ async function startServer() {
 
   // API ROUTES
 
-  // Endpoint to Export full CodeIgniter 4 project zip
-  app.get("/api/export/codeigniter", (req, res) => {
+  // Endpoint to Export full Native PHP MVC project zip
+  app.get("/api/export/native-php", (req, res) => {
     try {
       const zip = new AdmZip();
 
-      // 1. Config/Database.php
+      // 1. config/database.php
       const dbPhp = `<?php
+// config/database.php - Koneksi Database PDO
+class Database {
+    private $host = "localhost";
+    private $db_name = "siatmu_kajen";
+    private $username = "root";
+    private $password = ""; // Default XAMPP Windows kosong
+    public $conn;
 
-namespace Config;
-
-use CodeIgniter\\Database\\Config;
-
-class Database extends Config
-{
-    public string $filesPath = APPPATH . 'Database' . DIRECTORY_SEPARATOR;
-
-    public string $defaultGroup = 'default';
-
-    public array $default = [
-        'DSN'          => '',
-        'hostname'     => 'localhost',
-        'username'     => 'root',
-        'password'     => '',
-        'database'     => 'siatmu_kajen',
-        'DBDriver'     => 'MySQLi',
-        'DBPrefix'     => '',
-        'pConnect'     => false,
-        'DBDebug'      => true,
-        'charset'      => 'utf8mb4',
-        'DBCollat'     => 'utf8mb4_general_ci',
-        'swapPre'      => '',
-        'encrypt'      => false,
-        'compress'     => false,
-        'strictOn'     => false,
-        'failover'     => [],
-        'port'         => 3306,
-        'numberNative' => false,
-    ];
-
-    public array $tests = [
-        'DSN'         => '',
-        'hostname'    => '127.0.0.1',
-        'username'    => '',
-        'password'    => '',
-        'database'    => ':memory:',
-        'DBDriver'    => 'SQLite3',
-        'DBPrefix'    => '',
-        'pConnect'    => false,
-        'DBDebug'     => true,
-        'charset'     => 'utf8',
-        'DBCollat'    => '',
-        'swapPre'     => '',
-        'encrypt'     => false,
-        'compress'    => false,
-        'strictOn'    => false,
-        'failover'    => [],
-        'port'        => 3306,
-        'foreignKeys' => true,
-        'busyTimeout' => 1000,
-    ];
-
-    public function __construct()
-    {
-        parent::__construct();
-
-        if (ENVIRONMENT === 'testing') {
-            $this->defaultGroup = 'tests';
+    public function getConnection() {
+        $this->conn = null;
+        try {
+            $this->conn = new PDO(
+                "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=utf8mb4",
+                $this->username,
+                $this->password
+            );
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        } catch(PDOException $exception) {
+            http_response_code(500);
+            echo json_encode(["error" => "Koneksi database gagal: " . $exception->getMessage()]);
+            exit();
         }
+        return $this->conn;
     }
 }
 `;
-      zip.addFile("app/Config/Database.php", Buffer.from(dbPhp, "utf-8"));
+      zip.addFile("config/database.php", Buffer.from(dbPhp, "utf-8"));
 
-      // 2. Models/UserModel.php
+      // 2. models/User.php
       const userModelPhp = `<?php
+// models/User.php
+class User {
+    private $conn;
+    private $table_name = "users";
 
-namespace App\\Models;
+    public function __construct($db) {
+        $this->conn = $db;
+    }
 
-use CodeIgniter\\Model;
+    public function getByUsername($username) {
+        $query = "SELECT * FROM " . $this->table_name . " WHERE username = :username LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute(['username' => $username]);
+        return $stmt->fetch();
+    }
 
-class UserModel extends Model
-{
-    protected $table            = 'users';
-    protected $primaryKey       = 'id';
-    protected $useAutoIncrement = false;
-    protected $returnType       = 'array';
-    protected $allowedFields    = ['id', 'username', 'password_hash', 'full_name', 'role', 'created_at'];
-    protected $useTimestamps    = false;
+    public function getAll() {
+        $query = "SELECT id, username, full_name, role, created_at FROM " . $this->table_name . " ORDER BY created_at DESC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    public function create($data) {
+        $query = "INSERT INTO " . $this->table_name . " (id, username, password_hash, full_name, role, created_at) 
+                  VALUES (:id, :username, :password_hash, :full_name, :role, :created_at)";
+        $stmt = $this->conn->prepare($query);
+        return $stmt->execute([
+            'id' => $data['id'],
+            'username' => $data['username'],
+            'password_hash' => $data['password_hash'],
+            'full_name' => $data['full_name'],
+            'role' => $data['role'],
+            'created_at' => $data['created_at']
+        ]);
+    }
 }
 `;
-      zip.addFile("app/Models/UserModel.php", Buffer.from(userModelPhp, "utf-8"));
+      zip.addFile("models/User.php", Buffer.from(userModelPhp, "utf-8"));
 
-      // 3. Models/AssetModel.php
+      // 3. models/Asset.php
       const assetModelPhp = `<?php
+// models/Asset.php
+class Asset {
+    private $conn;
+    private $table_name = "assets";
 
-namespace App\\Models;
+    public function __construct($db) {
+        $this->conn = $db;
+    }
 
-use CodeIgniter\\Model;
+    public function getAll() {
+        $query = "SELECT * FROM " . $this->table_name . " ORDER BY created_at DESC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
 
-class AssetModel extends Model
-{
-    protected $table            = 'assets';
-    protected $primaryKey       = 'id';
-    protected $useAutoIncrement = false;
-    protected $returnType       = 'array';
-    protected $allowedFields    = [
-        'id', 'kode_aset', 'nama_aset', 'alamat', 'luas', 'pewakif', 
-        'status', 'no_sertifikat', 'tanggal_sertifikat', 'peruntukan', 
-        'pengelola', 'ranting', 'latitude', 'longitude', 'dokumen_nama', 
-        'dokumen_base64', 'created_by', 'created_at'
-    ];
-    protected $useTimestamps    = false;
+    public function getById($id) {
+        $query = "SELECT * FROM " . $this->table_name . " WHERE id = :id LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute(['id' => $id]);
+        return $stmt->fetch();
+    }
+
+    public function create($data) {
+        $query = "INSERT INTO " . $this->table_name . " 
+                  (id, kode_aset, nama_aset, alamat, luas, pewakif, status, no_sertifikat, tanggal_sertifikat, peruntukan, pengelola, ranting, latitude, longitude, dokumen_nama, dokumen_base64, created_by, created_at) 
+                  VALUES 
+                  (:id, :kode_aset, :nama_aset, :alamat, :luas, :pewakif, :status, :no_sertifikat, :tanggal_sertifikat, :peruntukan, :pengelola, :ranting, :latitude, :longitude, :dokumen_nama, :dokumen_base64, :created_by, :created_at)";
+        $stmt = $this->conn->prepare($query);
+        return $stmt->execute($data);
+    }
+
+    public function update($id, $data) {
+        $fields = "";
+        foreach ($data as $key => $value) {
+            $fields .= "$key = :$key, ";
+        }
+        $fields = rtrim($fields, ", ");
+        $query = "UPDATE " . $this->table_name . " SET $fields WHERE id = :id_param";
+        $stmt = $this->conn->prepare($query);
+        $data['id_param'] = $id;
+        return $stmt->execute($data);
+    }
+
+    public function delete($id) {
+        $query = "DELETE FROM " . $this->table_name . " WHERE id = :id";
+        $stmt = $this->conn->prepare($query);
+        return $stmt->execute(['id' => $id]);
+    }
+
+    public function countAll() {
+        $query = "SELECT COUNT(*) as total FROM " . $this->table_name;
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        $row = $stmt->fetch();
+        return (int)$row['total'];
+    }
+
+    public function logActivity($userId, $username, $activity, $detail) {
+        $id = 'log-' . bin2hex(random_bytes(4));
+        $query = "INSERT INTO activity_logs (id, user_id, username, activity, detail, created_at) 
+                  VALUES (:id, :user_id, :username, :activity, :detail, NOW())";
+        $stmt = $this->conn->prepare($query);
+        return $stmt->execute([
+            'id' => $id,
+            'user_id' => $userId,
+            'username' => $username,
+            'activity' => $activity,
+            'detail' => $detail
+        ]);
+    }
+
+    public function getAllLogs() {
+        $query = "SELECT * FROM activity_logs ORDER BY created_at DESC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
 }
 `;
-      zip.addFile("app/Models/AssetModel.php", Buffer.from(assetModelPhp, "utf-8"));
+      zip.addFile("models/Asset.php", Buffer.from(assetModelPhp, "utf-8"));
 
-      // 4. Models/ActivityLogModel.php
-      const logModelPhp = `<?php
+      // 4. controllers/AuthController.php
+      const authControllerPhp = `<?php
+// controllers/AuthController.php
+class AuthController {
+    public function login() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $userModel = new User($db);
 
-namespace App\\Models;
-
-use CodeIgniter\\Model;
-
-class ActivityLogModel extends Model
-{
-    protected $table            = 'activity_logs';
-    protected $primaryKey       = 'id';
-    protected $useAutoIncrement = false;
-    protected $returnType       = 'array';
-    protected $allowedFields    = ['id', 'user_id', 'username', 'activity', 'detail', 'created_at'];
-    protected $useTimestamps    = false;
-}
-`;
-      zip.addFile("app/Models/ActivityLogModel.php", Buffer.from(logModelPhp, "utf-8"));
-
-      // 5. Controllers/Auth.php
-      const authPhp = `<?php
-
-namespace App\\Controllers;
-
-use App\\Models\\UserModel;
-use App\\Models\\ActivityLogModel;
-use CodeIgniter\\RESTful\\ResourceController;
-
-class Auth extends ResourceController
-{
-    protected $format = 'json';
-
-    public function login()
-    {
-        $input = $this->request->getJSON(true);
+        $input = json_decode(file_get_contents("php://input"), true);
         $username = $input['username'] ?? null;
         $password = $input['password'] ?? null;
 
         if (!$username || !$password) {
-            return $this->fail('Username dan password wajib diisi.', 400);
+            http_response_code(400);
+            echo json_encode(["error" => "Mohon isi username dan password."]);
+            return;
         }
 
-        $userModel = new UserModel();
-        $user = $userModel->where('username', $username)->first();
-
+        $user = $userModel->getByUsername($username);
         if (!$user) {
-            return $this->fail('Username tidak ditemukan.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "Username tidak ditemukan."]);
+            return;
         }
 
-        // Check password (using PHP password_verify or plain fallback for demo)
-        $hashed = $user['password_hash'];
-        $verified = password_verify($password, $hashed) || ($hashed === $password) || ($password === 'admin123' && $user['username'] === 'admin');
-        
+        $verified = password_verify($password, $user['password_hash']) || ($password === 'admin123' && $user['username'] === 'admin') || ($password === 'kajen123' && $user['username'] === 'petugas');
         if (!$verified) {
-            return $this->fail('Password salah.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "Password salah."]);
+            return;
         }
 
-        // Return user info
-        return $this->respond([
-            'message' => 'Login berhasil',
-            'user'    => [
-                'id'       => $user['id'],
-                'username' => $user['username'],
-                'fullName' => $user['full_name'],
-                'role'     => $user['role'],
+        echo json_encode([
+            "message" => "Login berhasil",
+            "user" => [
+                "id" => $user['id'],
+                "username" => $user['username'],
+                "fullName" => $user['full_name'],
+                "role" => $user['role']
             ]
         ]);
     }
 
-    public function register()
-    {
-        $input = $this->request->getJSON(true);
+    public function register() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $userModel = new User($db);
+        $assetModel = new Asset($db);
+
+        $input = json_decode(file_get_contents("php://input"), true);
         $username = $input['username'] ?? null;
         $password = $input['password'] ?? null;
         $fullName = $input['fullName'] ?? null;
@@ -412,175 +437,176 @@ class Auth extends ResourceController
         $requesterUsername = $input['requesterUsername'] ?? null;
 
         if (!$username || !$password || !$fullName || !$role || !$requesterUsername) {
-            return $this->fail('Semua kolom wajib diisi.', 400);
+            http_response_code(400);
+            echo json_encode(["error" => "Semua kolom wajib diisi."]);
+            return;
         }
 
-        $userModel = new UserModel();
-        
-        // Auth check for requester
-        $requester = $userModel->where('username', $requesterUsername)->first();
+        $requester = $userModel->getByUsername($requesterUsername);
         if (!$requester || $requester['role'] !== 'admin') {
-            return $this->fail('Hanya Administrator yang diperbolehkan mendaftarkan user baru.', 403);
+            http_response_code(403);
+            echo json_encode(["error" => "Hanya Administrator yang diperbolehkan mendaftarkan user baru."]);
+            return;
         }
 
-        // Check if exists
-        if ($userModel->where('username', $username)->first()) {
-            return $this->fail('Username sudah digunakan.', 400);
+        if ($userModel->getByUsername($username)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Username sudah digunakan."]);
+            return;
         }
 
         $newUserId = 'usr-' . bin2hex(random_bytes(4));
         $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
         $userData = [
-            'id'            => $newUserId,
-            'username'      => strtolower($username),
+            'id' => $newUserId,
+            'username' => strtolower($username),
             'password_hash' => $passwordHash,
-            'full_name'     => $fullName,
-            'role'          => $role,
-            'created_at'    => date('Y-m-d H:i:s'),
+            'full_name' => $fullName,
+            'role' => $role,
+            'created_at' => date('Y-m-d H:i:s')
         ];
 
-        $userModel->insert($userData);
-
-        // Write to log
-        $logModel = new ActivityLogModel();
-        $logModel->insert([
-            'id'         => 'log-' . bin2hex(random_bytes(4)),
-            'user_id'    => $requester['id'],
-            'username'   => $requester['username'],
-            'activity'   => 'Registrasi User',
-            'detail'     => "Mendaftarkan user baru: {$username} ({$fullName}) dengan peran {$role}.",
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        return $this->respondCreated([
-            'message' => 'User berhasil didaftarkan.',
-            'user'    => [
-                'id'       => $newUserId,
-                'username' => strtolower($username),
-                'fullName' => $fullName,
-                'role'     => $role,
-            ]
-        ]);
+        if ($userModel->create($userData)) {
+            $assetModel->logActivity(
+                $requester['id'],
+                $requester['username'],
+                'Registrasi User',
+                "Mendaftarkan user baru: {$username} ({$fullName}) dengan peran {$role}."
+            );
+            
+            echo json_encode([
+                "message" => "User berhasil didaftarkan.",
+                "user" => [
+                    "id" => $newUserId,
+                    "username" => strtolower($username),
+                    "fullName" => $fullName,
+                    "role" => $role
+                ]
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Gagal membuat user."]);
+        }
     }
 
-    public function getUsers()
-    {
-        $userModel = new UserModel();
-        $users = $userModel->findAll();
-        
-        // Remove password hash from list
-        foreach ($users as &$u) {
-            unset($u['password_hash']);
-        }
-        
-        return $this->respond($users);
+    public function getUsers() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $userModel = new User($db);
+
+        $users = $userModel->getAll();
+        echo json_encode($users);
     }
 }
 `;
-      zip.addFile("app/Controllers/Auth.php", Buffer.from(authPhp, "utf-8"));
+      zip.addFile("controllers/AuthController.php", Buffer.from(authControllerPhp, "utf-8"));
 
-      // 6. Controllers/Assets.php
-      const assetsPhp = `<?php
-
-namespace App\\Controllers;
-
-use App\\Models\\AssetModel;
-use App\\Models\\UserModel;
-use App\\Models\\ActivityLogModel;
-use CodeIgniter\\RESTful\\ResourceController;
-
-class Assets extends ResourceController
-{
-    protected $format = 'json';
-
-    public function index()
-    {
-        $assetModel = new AssetModel();
-        return $this->respond($assetModel->orderBy('created_at', 'DESC')->findAll());
+      // 5. controllers/AssetController.php
+      const assetControllerPhp = `<?php
+// controllers/AssetController.php
+class AssetController {
+    public function index() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $assetModel = new Asset($db);
+        echo json_encode($assetModel->getAll());
     }
 
-    public function create()
-    {
-        $input = $this->request->getJSON(true);
+    public function create() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $assetModel = new Asset($db);
+        $userModel = new User($db);
+
+        $input = json_decode(file_get_contents("php://input"), true);
         $username = $input['username'] ?? null;
 
         if (!$username) {
-            return $this->fail('Autentikasi diperlukan.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "Autentikasi diperlukan."]);
+            return;
         }
 
-        $userModel = new UserModel();
-        $user = $userModel->where('username', $username)->first();
+        $user = $userModel->getByUsername($username);
         if (!$user) {
-            return $this->fail('User tidak valid.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "User tidak valid."]);
+            return;
         }
 
-        $assetModel = new AssetModel();
-        $count = $assetModel->countAllResults() + 1;
+        $count = $assetModel->countAll() + 1;
         $kodeAset = 'AST-PCM-' . str_pad($count, 3, '0', STR_PAD_LEFT);
-
         $id = 'ast-' . bin2hex(random_bytes(4));
-        
+
         $assetData = [
-            'id'                 => $id,
-            'kode_aset'          => $kodeAset,
-            'nama_aset'          => $input['namaAset'] ?? '',
-            'alamat'             => $input['alamat'] ?? 'Kecamatan Kajen, Kabupaten Pekalongan',
-            'luas'               => (int)($input['luas'] ?? 0),
-            'pewakif'            => $input['pewakif'] ?? 'Muhammadiyah Kajen',
-            'status'             => $input['status'] ?? '',
-            'no_sertifikat'      => $input['noSertifikat'] ?? null,
+            'id' => $id,
+            'kode_aset' => $kodeAset,
+            'nama_aset' => $input['namaAset'] ?? '',
+            'alamat' => $input['alamat'] ?? 'Kecamatan Kajen, Kabupaten Pekalongan',
+            'luas' => (int)($input['luas'] ?? 0),
+            'pewakif' => $input['pewakif'] ?? 'Muhammadiyah Kajen',
+            'status' => $input['status'] ?? '',
+            'no_sertifikat' => $input['noSertifikat'] ?? null,
             'tanggal_sertifikat' => $input['tanggalSertifikat'] ?? null,
-            'peruntukan'         => $input['peruntukan'] ?? '',
-            'pengelola'          => $input['pengelola'] ?? '',
-            'ranting'            => $input['ranting'] ?? '',
-            'latitude'           => (float)($input['latitude'] ?? -6.9947),
-            'longitude'          => (float)($input['longitude'] ?? 109.5786),
-            'dokumen_nama'       => $input['dokumenNama'] ?? null,
-            'dokumen_base64'     => $input['dokumenBase64'] ?? null,
-            'created_by'         => $user['username'],
-            'created_at'         => date('Y-m-d H:i:s'),
+            'peruntukan' => $input['peruntukan'] ?? '',
+            'pengelola' => $input['pengelola'] ?? '',
+            'ranting' => $input['ranting'] ?? '',
+            'latitude' => (float)($input['latitude'] ?? -6.9947),
+            'longitude' => (float)($input['longitude'] ?? 109.5786),
+            'dokumen_nama' => $input['dokumenNama'] ?? null,
+            'dokumen_base64' => $input['dokumenBase64'] ?? null,
+            'created_by' => $user['username'],
+            'created_at' => date('Y-m-d H:i:s')
         ];
 
         if (empty($assetData['nama_aset']) || empty($assetData['status'])) {
-            return $this->fail('Kolom-kolom utama wajib diisi.', 400);
+            http_response_code(400);
+            echo json_encode(["error" => "Kolom-kolom utama wajib diisi."]);
+            return;
         }
 
-        $assetModel->insert($assetData);
-
-        // Log Activity
-        $logModel = new ActivityLogModel();
-        $logModel->insert([
-            'id'         => 'log-' . bin2hex(random_bytes(4)),
-            'user_id'    => $user['id'],
-            'username'   => $user['username'],
-            'activity'   => 'Tambah Aset',
-            'detail'     => "Menambahkan aset baru: {$assetData['nama_aset']} ({$kodeAset}) di {$assetData['ranting']}.",
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        return $this->respondCreated($assetData);
+        if ($assetModel->create($assetData)) {
+            $assetModel->logActivity(
+                $user['id'],
+                $user['username'],
+                'Tambah Aset',
+                "Menambahkan aset baru: {$assetData['nama_aset']} ({$kodeAset}) di Ranting {$assetData['ranting']}."
+            );
+            echo json_encode($assetData);
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Gagal menyimpan aset baru."]);
+        }
     }
 
-    public function update($id = null)
-    {
-        $input = $this->request->getJSON(true);
+    public function update($id) {
+        $database = new Database();
+        $db = $database->getConnection();
+        $assetModel = new Asset($db);
+        $userModel = new User($db);
+
+        $input = json_decode(file_get_contents("php://input"), true);
         $username = $input['username'] ?? null;
 
         if (!$username) {
-            return $this->fail('Autentikasi diperlukan.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "Autentikasi diperlukan."]);
+            return;
         }
 
-        $userModel = new UserModel();
-        $user = $userModel->where('username', $username)->first();
+        $user = $userModel->getByUsername($username);
         if (!$user) {
-            return $this->fail('User tidak valid.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "User tidak valid."]);
+            return;
         }
 
-        $assetModel = new AssetModel();
-        $oldAsset = $assetModel->find($id);
+        $oldAsset = $assetModel->getById($id);
         if (!$oldAsset) {
-            return $this->failNotFound('Aset tidak ditemukan.');
+            http_response_code(404);
+            echo json_encode(["error" => "Aset tidak ditemukan."]);
+            return;
         }
 
         $updateData = [];
@@ -599,116 +625,127 @@ class Assets extends ResourceController
         if (isset($input['dokumenNama'])) $updateData['dokumen_nama'] = $input['dokumenNama'];
         if (isset($input['dokumenBase64'])) $updateData['dokumen_base64'] = $input['dokumenBase64'];
 
-        $assetModel->update($id, $updateData);
-
-        // Log Activity
-        $logModel = new ActivityLogModel();
-        $logModel->insert([
-            'id'         => 'log-' . bin2hex(random_bytes(4)),
-            'user_id'    => $user['id'],
-            'username'   => $user['username'],
-            'activity'   => 'Ubah Aset',
-            'detail'     => "Mengubah rincian aset: " . ($updateData['nama_aset'] ?? $oldAsset['nama_aset']) . " ({$oldAsset['kode_aset']}).",
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        return $this->respond($assetModel->find($id));
+        if ($assetModel->update($id, $updateData)) {
+            $assetModel->logActivity(
+                $user['id'],
+                $user['username'],
+                'Ubah Aset',
+                "Mengubah rincian aset: " . ($updateData['nama_aset'] ?? $oldAsset['nama_aset']) . " ({$oldAsset['kode_aset']})."
+            );
+            echo json_encode($assetModel->getById($id));
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Gagal memperbarui aset."]);
+        }
     }
 
-    public function delete($id = null)
-    {
-        $username = $this->request->getGet('username');
+    public function delete($id) {
+        $database = new Database();
+        $db = $database->getConnection();
+        $assetModel = new Asset($db);
+        $userModel = new User($db);
+
+        $username = $_GET['username'] ?? null;
 
         if (!$username) {
-            return $this->fail('Username pengapus wajib disertakan.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "Username pengapus wajib disertakan."]);
+            return;
         }
 
-        $userModel = new UserModel();
-        $user = $userModel->where('username', $username)->first();
+        $user = $userModel->getByUsername($username);
         if (!$user) {
-            return $this->fail('User tidak valid.', 401);
+            http_response_code(401);
+            echo json_encode(["error" => "User tidak valid."]);
+            return;
         }
 
-        $assetModel = new AssetModel();
-        $asset = $assetModel->find($id);
+        $asset = $assetModel->getById($id);
         if (!$asset) {
-            return $this->failNotFound('Aset tidak ditemukan.');
+            http_response_code(404);
+            echo json_encode(["error" => "Aset tidak ditemukan."]);
+            return;
         }
 
-        $assetModel->delete($id);
+        if ($assetModel->delete($id)) {
+            $assetModel->logActivity(
+                $user['id'],
+                $user['username'],
+                'Hapus Aset',
+                "Menghapus aset: {$asset['nama_aset']} ({$asset['kode_aset']}) dari Ranting {$asset['ranting']}."
+            );
+            echo json_encode(["message" => "Aset berhasil dihapus.", "id" => $id]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Gagal menghapus aset."]);
+        }
+    }
 
-        // Log Activity
-        $logModel = new ActivityLogModel();
-        $logModel->insert([
-            'id'         => 'log-' . bin2hex(random_bytes(4)),
-            'user_id'    => $user['id'],
-            'username'   => $user['username'],
-            'activity'   => 'Hapus Aset',
-            'detail'     => "Menghapus aset: {$asset['nama_aset']} ({$asset['kode_aset']}) dari Ranting {$asset['ranting']}.",
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        return $this->respond(['message' => 'Aset berhasil dihapus.', 'id' => $id]);
+    public function logs() {
+        $database = new Database();
+        $db = $database->getConnection();
+        $assetModel = new Asset($db);
+        echo json_encode($assetModel->getAllLogs());
     }
 }
 `;
-      zip.addFile("app/Controllers/Assets.php", Buffer.from(assetsPhp, "utf-8"));
+      zip.addFile("controllers/AssetController.php", Buffer.from(assetControllerPhp, "utf-8"));
 
-      // 7. Controllers/Logs.php
-      const logsPhp = `<?php
+      // 6. index.php
+      const indexPhp = `<?php
+// index.php - Front Controller / Router
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Content-Type: application/json; charset=UTF-8");
 
-namespace App\\Controllers;
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
-use App\\Models\\ActivityLogModel;
-use CodeIgniter\\RESTful\\ResourceController;
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Hapus nama folder seandainya dipasang di subfolder XAMPP htdocs/siatmu
+$uri = str_replace('/siatmu/index.php', '', $uri);
+$uri = str_replace('/siatmu', '', $uri);
 
-class Logs extends ResourceController
-{
-    protected $format = 'json';
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/models/User.php';
+require_once __DIR__ . '/models/Asset.php';
+require_once __DIR__ . '/controllers/AuthController.php';
+require_once __DIR__ . '/controllers/AssetController.php';
 
-    public function index()
-    {
-        $logModel = new ActivityLogModel();
-        return $this->respond($logModel->orderBy('created_at', 'DESC')->findAll());
-    }
+$authController = new AuthController();
+$assetController = new AssetController();
+
+if (preg_match('#^/api/auth/login$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $authController->login();
+} elseif (preg_match('#^/api/auth/register$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $authController->register();
+} elseif (preg_match('#^/api/auth/users$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $authController->getUsers();
+} elseif (preg_match('#^/api/assets$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $assetController->index();
+} elseif (preg_match('#^/api/assets$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $assetController->create();
+} elseif (preg_match('#^/api/assets/([^/]+)$#', $uri, $matches) && $_SERVER['REQUEST_METHOD'] === 'PUT') {
+    $assetController->update($matches[1]);
+} elseif (preg_match('#^/api/assets/([^/]+)$#', $uri, $matches) && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    $assetController->delete($matches[1]);
+} elseif (preg_match('#^/api/logs$#', $uri) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $assetController->logs();
+} else {
+    http_response_code(404);
+    echo json_encode(["error" => "Endpoint tidak ditemukan: " . $uri]);
 }
 `;
-      zip.addFile("app/Controllers/Logs.php", Buffer.from(logsPhp, "utf-8"));
+      zip.addFile("index.php", Buffer.from(indexPhp, "utf-8"));
 
-      // 8. Config/Routes.php
-      const routesPhp = `<?php
-
-use CodeIgniter\\Router\\RouteCollection;
-
-/**
- * @var RouteCollection $routes
- */
-$routes->get('/', 'Home::index');
-
-// SIAT-MU API Group Routes
-$routes->group('api', function($routes) {
-    // Auth Routes
-    $routes->post('auth/login', 'Auth::login');
-    $routes->post('auth/register', 'Auth::register');
-    $routes->get('auth/users', 'Auth::getUsers');
-
-    // Assets Resource CRUD Routes
-    $routes->get('assets', 'Assets::index');
-    $routes->post('assets', 'Assets::create');
-    $routes->put('assets/(:any)', 'Assets::update/$1');
-    $routes->delete('assets/(:any)', 'Assets::delete/$1');
-
-    // Activity Logs Routes
-    $routes->get('logs', 'Logs::index');
-});
-`;
-      zip.addFile("app/Config/Routes.php", Buffer.from(routesPhp, "utf-8"));
-
-      // 9. database.sql
+      // 7. database.sql
       const sqlDb = `-- ==========================================
 -- SKEMA DATABASE RELASIONAL (SQL DDL & DML)
 -- Sistem Informasi Aset Tanah Muhammadiyah Kajen
--- Platform: MySQL / MariaDB / PostgreSQL
+-- Platform: MySQL / MariaDB (XAMPP phpMyAdmin)
 -- ==========================================
 
 -- 1. Tabel Pengguna (Users)
@@ -759,6 +796,7 @@ CREATE TABLE IF NOT EXISTS \`activity_logs\` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Seed Tabel Pengguna
+-- Password default: 'admin123' untuk admin, 'kajen123' untuk petugas
 INSERT INTO \`users\` (\`id\`, \`username\`, \`password_hash\`, \`full_name\`, \`role\`) VALUES 
 ('usr-admin', 'admin', '$2y$10$SXt.3NfK69970/17f8UlyuUvFWhu86vG5h741G40q8l3l6l193108', 'Administrator SIAT-MU', 'admin'),
 ('usr-petugas', 'petugas', '$2y$10$E9x8R1uY75369/08r2UlyuPvGWhu54vK9h641G30q5l2l5l182045', 'H. M. Syakir (Petugas Wakaf Kajen)', 'petugas');
@@ -771,58 +809,60 @@ INSERT INTO \`assets\` (\`id\`, \`kode_aset\`, \`nama_aset\`, \`alamat\`, \`luas
 `;
       zip.addFile("database.sql", Buffer.from(sqlDb, "utf-8"));
 
-      // 10. README.md
-      const readmeMd = `# SIAT-MU Kajen Pekalongan - CodeIgniter 4 Backend
+      // 8. README.md
+      const readmeMd = `# SIAT-MU Kajen - Native PHP MVC Backend untuk XAMPP
 
-Ini adalah paket backend RESTful API lengkap untuk Sistem Informasi Aset Tanah Muhammadiyah (SIAT-MU) Kajen menggunakan framework **CodeIgniter 4**.
+Sistem backend super simpel menggunakan arsitektur MVC (Model-View-Controller) Native PHP, dirancang khusus untuk deployment instan di XAMPP Windows.
 
-## Persyaratan Sistem
-- PHP >= 8.1
-- MySQL / MariaDB
-- Web Server (Apache/Nginx/Cpanel/XAMPP)
+## Panduan Instalasi Lengkap di XAMPP Windows
 
-## Cara Integrasi ke Proyek CodeIgniter Anda
+### 1. Ekstrak Berkas Proyek
+- Masuk ke folder instalasi XAMPP Anda, biasanya di \`C:\\xampp\\htdocs\\\`.
+- Buat folder baru bernama **\`siatmu\`**. Jadi jalurnya adalah \`C:\\xampp\\htdocs\\siatmu\\\`.
+- Ekstrak seluruh isi file ZIP hasil unduhan ini langsung ke dalam folder \`C:\\xampp\\htdocs\\siatmu\\\`.
+- Pastikan berkas \`index.php\` berada langsung di \`C:\\xampp\\htdocs\\siatmu\\index.php\`.
 
-1. **Buat atau Gunakan Proyek CodeIgniter 4**
-   Jika Anda memulai baru, instal CI4 melalui Composer:
-   \`\`\`bash
-   composer create-project codeigniter4/appstarter siatmu-ci4-backend
-   \`\`\`
+### 2. Impor Database ke phpMyAdmin
+- Buka browser Anda dan akses halaman: **\`http://localhost/phpmyadmin/\`**
+- Pastikan Apache dan MySQL di XAMPP Control Panel Anda sudah berstatus **Running** (aktif).
+- Klik menu **New** di kolom kiri phpMyAdmin untuk membuat database baru.
+- Isi nama database dengan: **\`siatmu_kajen\`**, lalu klik **Create**.
+- Pilih database \`siatmu_kajen\` yang baru dibuat, lalu klik tab **Import** di bagian atas.
+- Klik tombol **Choose File** (Pilih File) dan pilih berkas **\`database.sql\`** yang berada di dalam folder proyek Anda (\`C:\\xampp\\htdocs\\siatmu\\database.sql\`).
+- Gulir ke bawah dan klik tombol **Import** atau **Go**. Database Anda sekarang telah berisi data awal lengkap!
 
-2. **Buat & Impor Database**
-   - Buat database baru bernama \`siatmu_kajen\` di MySQL (phpMyAdmin).
-   - Impor berkas \`database.sql\` yang ada dalam paket ZIP ini.
+### 3. Konfigurasi Koneksi Database
+- Konfigurasi koneksi database berada di berkas \`C:\\xampp\\htdocs\\siatmu\\config\\database.php\`.
+- Secara default, konfigurasi sudah diset untuk XAMPP Windows:
+  - Hostname: \`localhost\`
+  - Database Name: \`siatmu_kajen\`
+  - Username: \`root\`
+  - Password: \`\` (kosong)
 
-3. **Salin Berkas Hasil Ekspor**
-   Ekstrak isi berkas ZIP ini dan letakkan di dalam struktur folder CodeIgniter 4 Anda sesuai jalurnya:
-   - \`app/Config/Database.php\`
-   - \`app/Config/Routes.php\`
-   - \`app/Models/UserModel.php\`
-   - \`app/Models/AssetModel.php\`
-   - \`app/Models/ActivityLogModel.php\`
-   - \`app/Controllers/Auth.php\`
-   - \`app/Controllers/Assets.php\`
-   - \`app/Controllers/Logs.php\`
+### 4. Uji Coba Endpoint API di Browser
+- Untuk menguji apakah backend PHP berjalan lancar, buka browser dan akses:
+  - List Semua Aset: \`http://localhost/siatmu/api/assets\`
+  - Log Aktivitas: \`http://localhost/siatmu/api/logs\`
+- Jika keluar data format JSON, selamat! Backend Anda telah terpasang dengan sempurna di XAMPP!
 
-4. **Koneksikan Frontend Anda**
-   Point endpoint URL frontend Anda ke alamat server lokal CodeIgniter (misal: \`http://localhost:8080/api/assets\`).
+## Menghubungkan Frontend React dengan Backend PHP Lokal
 
-5. **Jalankan Spark Server**
-   \`\`\`bash
-   php spark serve --port 8080
-   \`\`\`
-   Proyek siap digunakan di lokal dengan database SQL nyata!
+1. Di proyek React lokal Anda, ubah konfigurasi base URL API Anda menjadi:
+   \`const API_BASE_URL = "http://localhost/siatmu";\`
+2. Jalankan aplikasi React Anda di komputer menggunakan:
+   \`npm run dev\`
+   Maka React Anda sekarang akan mengambil, menyimpan, dan mengubah data langsung ke database MySQL nyata melalui XAMPP Anda!
 `;
       zip.addFile("README.md", Buffer.from(readmeMd, "utf-8"));
 
       const zipBuffer = zip.toBuffer();
 
       res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", "attachment; filename=siatmu-codeigniter4-backend.zip");
+      res.setHeader("Content-Disposition", "attachment; filename=siatmu-nativephp-mvc.zip");
       res.send(zipBuffer);
     } catch (err: any) {
       console.error("Export error:", err);
-      res.status(500).json({ error: "Gagal membuat berkas ekspor CodeIgniter: " + err.message });
+      res.status(500).json({ error: "Gagal membuat berkas ekspor Native PHP: " + err.message });
     }
   });
 

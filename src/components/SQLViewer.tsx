@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Database, Copy, Check, FileCode, Server, Download, FolderGit, Cpu } from 'lucide-react';
+import { Database, Copy, Check, FileCode, Server, Download, FolderGit, Cpu, HelpCircle } from 'lucide-react';
 
 export default function SQLViewer() {
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeMainTab, setActiveMainTab] = useState<'sql' | 'ci4'>('sql');
-  const [activeCiSubTab, setActiveCiSubTab] = useState<'db' | 'model' | 'controller' | 'routes'>('db');
+  const [activeMainTab, setActiveMainTab] = useState<'sql' | 'mvc'>('sql');
+  const [activeMvcSubTab, setActiveMvcSubTab] = useState<'db' | 'router' | 'model' | 'controller'>('db');
 
   const sqlDDL = `-- ==========================================
 -- SKEMA DATABASE RELASIONAL (SQL DDL)
 -- Sistem Informasi Aset Tanah Muhammadiyah Kajen
--- Platform: MySQL / MariaDB / PostgreSQL
+-- Platform: MySQL / MariaDB (XAMPP)
 -- ==========================================
 
 -- 1. Tabel Pengguna (Users)
@@ -76,111 +76,171 @@ INSERT INTO \`assets\` (\`id\`, \`kode_aset\`, \`nama_aset\`, \`alamat\`, \`luas
 ('ast-2', 'AST-PCM-002', 'Gedung Utama SD Muhammadiyah Gejlig', 'Jl. Raya Gejlig, Desa Gejlig, Kec. Kajen', 1850, 'Hj. Siti Aisyah', 'Sertifikat Wakaf (Milik Muhammadiyah)', 'W.10.02.15.01.0012', '2015-08-22', 'Gedung Sekolah / Madrasah / TK ABA', 'Majelis Dikdasmen PCM Kajen', 'PRM Gejlig', -6.980500, 109.585200, 'admin'),
 ('ast-3', 'AST-PCM-003', 'Masjid Al-Muttaqin Rowolaku & Madrasah Diniyah', 'Dusun Rowolaku RT 03/RW 01, Desa Rowolaku', 650, 'K.H. Ahmad Dahlan (Wakaf Keluarga)', 'Sertifikat Wakaf (Milik Muhammadiyah)', 'W.10.02.15.01.0035', '2018-11-05', 'Masjid / Musholla', 'Takmir Masjid / Musholla', 'PRM Rowolaku', -7.012500, 109.593000, 'petugas');`;
 
-  const ciDatabase = `<?php
+  const phpDatabase = `<?php
+// config/database.php
+class Database {
+    private $host = "localhost";
+    private $db_name = "siatmu_kajen";
+    private $username = "root";
+    private $password = "";
+    public $conn;
 
-namespace Config;
-
-use CodeIgniter\\Database\\Config;
-
-class Database extends Config
-{
-    public string $filesPath = APPPATH . 'Database' . DIRECTORY_SEPARATOR;
-    public string $defaultGroup = 'default';
-
-    public array $default = [
-        'DSN'          => '',
-        'hostname'     => 'localhost',
-        'username'     => 'root',
-        'password'     => '',
-        'database'     => 'siatmu_kajen',
-        'DBDriver'     => 'MySQLi',
-        'DBPrefix'     => '',
-        'pConnect'     => false,
-        'DBDebug'      => true,
-        'charset'      => 'utf8mb4',
-        'DBCollat'     => 'utf8mb4_general_ci',
-        'swapPre'      => '',
-        'encrypt'      => false,
-        'compress'     => false,
-        'strictOn'     => false,
-        'failover'     => [],
-        'port'         => 3306,
-        'numberNative' => false,
-    ];
+    public function getConnection() {
+        $this->conn = null;
+        try {
+            $this->conn = new PDO(
+                "mysql:host=" . $this->host . ";dbname=" . $this->db_name, 
+                $this->username, 
+                $this->password
+            );
+            $this->conn->exec("set names utf8mb4");
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch(PDOException $exception) {
+            echo "Connection error: " . $exception->getMessage();
+        }
+        return $this->conn;
+    }
 }`;
 
-  const ciModel = `<?php
+  const phpRouter = `<?php
+// index.php (Front Controller & Router)
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
-namespace App\\Models;
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
-use CodeIgniter\\Model;
+require_once 'config/database.php';
+require_once 'models/User.php';
+require_once 'models/Asset.php';
+require_once 'controllers/AuthController.php';
+require_once 'controllers/AssetController.php';
 
-class AssetModel extends Model
-{
-    protected $table            = 'assets';
-    protected $primaryKey       = 'id';
-    protected $useAutoIncrement = false;
-    protected $returnType       = 'array';
-    protected $allowedFields    = [
-        'id', 'kode_aset', 'nama_aset', 'alamat', 'luas', 'pewakif', 
-        'status', 'no_sertifikat', 'tanggal_sertifikat', 'peruntukan', 
-        'pengelola', 'ranting', 'latitude', 'longitude', 'dokumen_nama', 
-        'dokumen_base64', 'created_by', 'created_at'
-    ];
+$db = (new Database())->getConnection();
+$request_uri = $_SERVER['REQUEST_URI'];
+$base_path = '/siatmu_kajen'; // Sesuaikan folder XAMPP htdocs Anda
+
+// Bersihkan URI dari base path
+$route = str_replace($base_path, '', $request_uri);
+$route = explode('?', $route)[0]; // hilangkan query parameters
+
+// Sederhanakan Routing API
+if (preg_match('/^\\/api\\/assets\\/([a-zA-Z0-9-]+)$/', $route, $matches)) {
+    $assetId = $matches[1];
+    $controller = new AssetController($db);
+    if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        $controller->delete($assetId);
+    } else if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+        $controller->update($assetId);
+    }
+} else if ($route === '/api/assets') {
+    $controller = new AssetController($db);
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $controller->getAll();
+    } else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $controller->create();
+    }
+} else if ($route === '/api/auth/login') {
+    $controller = new AuthController($db);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $controller->login();
+    }
+} else {
+    http_response_code(404);
+    echo json_encode(["message" => "Endpoint tidak ditemukan."]);
 }`;
 
-  const ciController = `<?php
+  const phpModel = `<?php
+// models/Asset.php
+class Asset {
+    private $conn;
+    private $table_name = "assets";
 
-namespace App\\Controllers;
-
-use App\\Models\\AssetModel;
-use App\\Models\\UserModel;
-use CodeIgniter\\RESTful\\ResourceController;
-
-class Assets extends ResourceController
-{
-    protected $format = 'json';
-
-    public function index()
-    {
-        $model = new AssetModel();
-        return $this->respond($model->orderBy('created_at', 'DESC')->findAll());
+    public function __construct($db) {
+        $this->conn = $db;
     }
 
-    public function create()
-    {
-        $input = $this->request->getJSON(true);
-        $model = new AssetModel();
+    public function readAll() {
+        $query = "SELECT * FROM " . $this->table_name . " ORDER BY created_at DESC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function create($data) {
+        $query = "INSERT INTO " . $this->table_name . " 
+                  (id, kode_aset, nama_aset, alamat, luas, pewakif, status, no_sertifikat, 
+                   tanggal_sertifikat, peruntukan, pengelola, ranting, latitude, longitude, 
+                   dokumen_nama, dokumen_base64, created_by) 
+                  VALUES 
+                  (:id, :kode_aset, :nama_aset, :alamat, :luas, :pewakif, :status, :no_sertifikat, 
+                   :tanggal_sertifikat, :peruntukan, :pengelola, :ranting, :latitude, :longitude, 
+                   :dokumen_nama, :dokumen_base64, :created_by)";
         
+        $stmt = $this->conn->prepare($query);
+        return $stmt->execute($data);
+    }
+}`;
+
+  const phpController = `<?php
+// controllers/AssetController.php
+class AssetController {
+    private $db;
+    private $asset;
+
+    public function __construct($db) {
+        $this->db = $db;
+        $this->asset = new Asset($db);
+    }
+
+    public function getAll() {
+        $assets = $this->asset->readAll();
+        http_response_code(200);
+        echo json_encode($assets);
+    }
+
+    public function create() {
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (empty($data['nama_aset']) || empty($data['luas'])) {
+            http_response_code(400);
+            echo json_encode(["message" => "Data tidak lengkap."]);
+            return;
+        }
+
         $id = 'ast-' . bin2hex(random_bytes(4));
         $assetData = [
-            'id'            => $id,
-            'kode_aset'     => 'AST-PCM-' . str_pad($model->countAllResults() + 1, 3, '0', STR_PAD_LEFT),
-            'nama_aset'     => $input['namaAset'] ?? '',
-            'luas'          => (int)($input['luas'] ?? 0),
-            'status'        => $input['status'] ?? '',
-            'created_by'    => $input['username'] ?? 'admin',
-            'created_at'    => date('Y-m-d H:i:s'),
+            ':id' => $id,
+            ':kode_aset' => 'AST-PCM-' . str_pad(rand(10,999), 3, '0', STR_PAD_LEFT),
+            ':nama_aset' => $data['nama_aset'],
+            ':alamat' => $data['alamat'] ?? '',
+            ':luas' => (int)$data['luas'],
+            ':pewakif' => $data['pewakif'] ?? '',
+            ':status' => $data['status'] ?? 'Wakaf',
+            ':no_sertifikat' => $data['no_sertifikat'] ?? '',
+            ':tanggal_sertifikat' => $data['tanggal_sertifikat'] ?? null,
+            ':peruntukan' => $data['peruntukan'] ?? 'Lainnya',
+            ':pengelola' => $data['pengelola'] ?? 'PCM Kajen',
+            ':ranting' => $data['ranting'] ?? 'Kajen Kota',
+            ':latitude' => $data['latitude'] ?? -6.9947,
+            ':longitude' => $data['longitude'] ?? 109.5786,
+            ':dokumen_nama' => $data['dokumen_nama'] ?? null,
+            ':dokumen_base64' => $data['dokumen_base64'] ?? null,
+            ':created_by' => $data['created_by'] ?? 'admin'
         ];
 
-        $model->insert($assetData);
-        return $this->respondCreated($assetData);
+        if ($this->asset->create($assetData)) {
+            http_response_code(201);
+            echo json_encode(["message" => "Aset berhasil ditambahkan.", "id" => $id]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["message" => "Gagal menambahkan aset."]);
+        }
     }
 }`;
-
-  const ciRoutes = `<?php
-
-use CodeIgniter\\Router\\RouteCollection;
-
-/**
- * @var RouteCollection $routes
- */
-$routes->group('api', function($routes) {
-    $routes->get('assets', 'Assets::index');
-    $routes->post('assets', 'Assets::create');
-    $routes->put('assets/(:any)', 'Assets::update/$1');
-    $routes->delete('assets/(:any)', 'Assets::delete/$1');
-});`;
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -189,10 +249,10 @@ $routes->group('api', function($routes) {
   };
 
   const activeCodeContent = () => {
-    if (activeCiSubTab === 'db') return ciDatabase;
-    if (activeCiSubTab === 'model') return ciModel;
-    if (activeCiSubTab === 'controller') return ciController;
-    return ciRoutes;
+    if (activeMvcSubTab === 'db') return phpDatabase;
+    if (activeMvcSubTab === 'router') return phpRouter;
+    if (activeMvcSubTab === 'model') return phpModel;
+    return phpController;
   };
 
   return (
@@ -202,21 +262,21 @@ $routes->group('api', function($routes) {
         <div className="space-y-1">
           <h3 className="font-display font-extrabold text-slate-800 text-lg flex items-center gap-2">
             <Database className="w-5.5 h-5.5 text-emerald-700" />
-            Integrasi & Ekspor CodeIgniter 4 (PHP)
+            Integrasi & Ekspor PHP MVC Murni (XAMPP)
           </h3>
           <p className="text-xs text-slate-500">
-            Skema basis data relasional SQL dan kode generator backend lengkap siap pakai untuk framework CodeIgniter 4.
+            Arsitektur backend MVC berbasis PHP murni yang sangat mudah diterapkan di Windows XAMPP. Tanpa perlu setup framework berat.
           </p>
         </div>
 
         {/* Export Download Button */}
         <a
-          href="/api/export/codeigniter"
+          href="/api/export/native-php"
           download
           className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-700/10 hover:shadow-lg cursor-pointer"
         >
           <Download className="w-4 h-4 animate-bounce" />
-          Unduh CodeIgniter 4 Backend (.ZIP)
+          Unduh File ZIP Backend PHP MVC (.ZIP)
         </a>
       </div>
 
@@ -230,11 +290,11 @@ $routes->group('api', function($routes) {
           1. Skema Database SQL
         </button>
         <button
-          onClick={() => setActiveMainTab('ci4')}
-          className={`px-4 py-2 text-xs font-bold border-b-2 transition-all cursor-pointer ${activeMainTab === 'ci4' ? 'border-emerald-600 text-emerald-800' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+          onClick={() => setActiveMainTab('mvc')}
+          className={`px-4 py-2 text-xs font-bold border-b-2 transition-all cursor-pointer ${activeMainTab === 'mvc' ? 'border-emerald-600 text-emerald-800' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
         >
           <Server className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-          2. Kode Backend CodeIgniter 4 (PHP)
+          2. Kode PHP MVC (Sederhana & Terstruktur)
         </button>
       </div>
 
@@ -301,49 +361,49 @@ $routes->group('api', function($routes) {
         </div>
       )}
 
-      {/* CodeIgniter Tab Panels */}
-      {activeMainTab === 'ci4' && (
+      {/* PHP MVC Tab Panels */}
+      {activeMainTab === 'mvc' && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
             <button
-              onClick={() => setActiveCiSubTab('db')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeCiSubTab === 'db' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setActiveMvcSubTab('db')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeMvcSubTab === 'db' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              Config/Database.php
+              config/database.php
             </button>
             <button
-              onClick={() => setActiveCiSubTab('model')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeCiSubTab === 'model' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setActiveMvcSubTab('router')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeMvcSubTab === 'router' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              Models/AssetModel.php
+              index.php (Router)
             </button>
             <button
-              onClick={() => setActiveCiSubTab('controller')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeCiSubTab === 'controller' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setActiveMvcSubTab('model')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeMvcSubTab === 'model' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              Controllers/Assets.php
+              models/Asset.php
             </button>
             <button
-              onClick={() => setActiveCiSubTab('routes')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeCiSubTab === 'routes' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setActiveMvcSubTab('controller')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${activeMvcSubTab === 'controller' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              Config/Routes.php
+              controllers/AssetController.php
             </button>
           </div>
 
           <div className="space-y-2 flex flex-col">
             <div className="flex justify-between items-center bg-slate-50 px-3.5 py-2.5 rounded-t-xl border border-slate-200 border-b-0">
               <span className="text-xs font-mono font-bold text-slate-700">
-                {activeCiSubTab === 'db' && 'app/Config/Database.php'}
-                {activeCiSubTab === 'model' && 'app/Models/AssetModel.php'}
-                {activeCiSubTab === 'controller' && 'app/Controllers/Assets.php'}
-                {activeCiSubTab === 'routes' && 'app/Config/Routes.php'}
+                {activeMvcSubTab === 'db' && 'config/database.php'}
+                {activeMvcSubTab === 'router' && 'index.php'}
+                {activeMvcSubTab === 'model' && 'models/Asset.php'}
+                {activeMvcSubTab === 'controller' && 'controllers/AssetController.php'}
               </span>
               <button
-                onClick={() => copyToClipboard(activeCodeContent(), activeCiSubTab)}
+                onClick={() => copyToClipboard(activeCodeContent(), activeMvcSubTab)}
                 className="px-2.5 py-1 text-[10px] bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-600 flex items-center gap-1 transition-all cursor-pointer"
               >
-                {copied === activeCiSubTab ? (
+                {copied === activeMvcSubTab ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-emerald-600" /> Tersalin!
                   </>
@@ -361,19 +421,70 @@ $routes->group('api', function($routes) {
         </div>
       )}
 
-      {/* Guide Card */}
-      <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-950 text-xs leading-relaxed space-y-2">
-        <strong className="flex items-center gap-1.5 text-emerald-900 text-sm">
-          <Download className="w-4 h-4 text-emerald-700 animate-bounce" />
-          Cara Menggunakan File Ekspor CodeIgniter 4
+      {/* Interactive, Super-Detailed Guide Section */}
+      <div className="p-6 bg-emerald-50/70 border border-emerald-100/80 rounded-2xl text-slate-700 space-y-4">
+        <strong className="flex items-center gap-2 text-emerald-900 text-sm font-display font-extrabold">
+          <HelpCircle className="w-5 h-5 text-emerald-700" />
+          Panduan Langkah Demi Langkah Deploy ke XAMPP Windows
         </strong>
-        <ol className="list-decimal pl-5 space-y-1 text-slate-700 text-xs">
-          <li>Klik tombol <b>"Unduh CodeIgniter 4 Backend (.ZIP)"</b> di kanan atas halaman ini.</li>
-          <li>Ekstrak isi berkas ZIP ke dalam direktori dasar proyek CodeIgniter 4 Anda.</li>
-          <li>Impor file <code>database.sql</code> yang disertakan di dalam file zip ke dalam phpMyAdmin Anda (dengan nama database: <code>siatmu_kajen</code>).</li>
-          <li>Konfigurasi koneksi database Anda di <code>app/Config/Database.php</code>.</li>
-          <li>Jalankan server CodeIgniter Anda dengan perintah <code>php spark serve</code>.</li>
-        </ol>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs leading-relaxed">
+          {/* Bagian Backend */}
+          <div className="space-y-3 bg-white p-4 rounded-xl border border-emerald-100">
+            <h4 className="font-bold text-emerald-800 flex items-center gap-1.5 text-xs">
+              <span className="bg-emerald-100 text-emerald-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+              Langkah Setup Backend & Database di XAMPP
+            </h4>
+            <ol className="list-decimal pl-4.5 space-y-2 text-slate-600">
+              <li>
+                <strong>Nyalakan XAMPP:</strong> Buka XAMPP Control Panel di Windows Anda, lalu klik tombol <strong>Start</strong> pada modul <strong>Apache</strong> dan <strong>MySQL</strong>.
+              </li>
+              <li>
+                <strong>Buat Folder Baru:</strong> Pergi ke folder instalasi XAMPP Anda (biasanya di <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono">C:\xampp\htdocs</code>) dan buat folder baru bernama <code className="bg-slate-100 px-1 py-0.5 rounded text-emerald-800 font-bold font-mono">siatmu_kajen</code>.
+              </li>
+              <li>
+                <strong>Ekstrak ZIP Backend:</strong> Klik tombol <strong>"Unduh File ZIP Backend PHP MVC"</strong> di kanan atas halaman ini. Ekstrak seluruh isi file ZIP tersebut langsung ke dalam folder <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">C:\xampp\htdocs\siatmu_kajen</code>.
+              </li>
+              <li>
+                <strong>Buat Database di phpMyAdmin:</strong> Buka browser Anda dan akses <a href="http://localhost/phpmyadmin" target="_blank" className="text-emerald-700 underline hover:text-emerald-900 font-bold">localhost/phpmyadmin</a>. Buat database baru dengan nama <code className="bg-slate-100 px-1 py-0.5 rounded text-emerald-800 font-bold font-mono">siatmu_kajen</code>.
+              </li>
+              <li>
+                <strong>Impor File SQL:</strong> Klik menu <strong>Import</strong> di phpMyAdmin, pilih file <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">database.sql</code> yang ada di dalam folder ekstraksi tadi, lalu klik tombol <strong>Import/Go</strong> di bagian bawah.
+              </li>
+            </ol>
+          </div>
+
+          {/* Bagian Frontend */}
+          <div className="space-y-3 bg-white p-4 rounded-xl border border-emerald-100">
+            <h4 className="font-bold text-emerald-800 flex items-center gap-1.5 text-xs">
+              <span className="bg-emerald-100 text-emerald-800 w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+              Langkah Kompilasi & Gabung Frontend React
+            </h4>
+            <ol className="list-decimal pl-4.5 space-y-2 text-slate-600">
+              <li>
+                <strong>Buka Project React Lokal:</strong> Pastikan Anda telah mengunduh/clone folder kode React ini ke komputer lokal Anda. Buka terminal (CMD / Git Bash) di folder tersebut.
+              </li>
+              <li>
+                <strong>Sesuaikan Endpoint API:</strong> Sebelum kompilasi, pastikan kode React memanggil API ke localhost XAMPP Anda. Cari file pemanggilan API Anda (biasanya diatur ke <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-emerald-800">http://localhost/siatmu_kajen</code>).
+              </li>
+              <li>
+                <strong>Jalankan Proses Build / Kompilasi:</strong> Di dalam terminal Anda, jalankan perintah:
+                <pre className="bg-slate-900 text-slate-200 p-2 rounded-lg mt-1 font-mono text-[10px] select-all">npm run build</pre>
+                Perintah ini akan secara otomatis membuat folder baru bernama <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-rose-600 font-bold">dist</code> yang berisi file-file HTML, CSS, dan JS yang sudah terkompresi.
+              </li>
+              <li>
+                <strong>Salin Hasil Build ke htdocs:</strong> Salin (copy) seluruh file & folder di dalam folder <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">dist</code> tersebut, kemudian paste langsung ke dalam folder <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold text-emerald-800">C:\xampp\htdocs\siatmu_kajen</code>.
+              </li>
+              <li>
+                <strong>Aplikasi Siap Digunakan!</strong> Sekarang buka browser Anda dan ketik alamat <a href="http://localhost/siatmu_kajen" target="_blank" className="text-emerald-700 underline hover:text-emerald-900 font-bold">http://localhost/siatmu_kajen</a>. Aplikasi pendataan aset tanah siap dijalankan secara offline sepenuhnya!
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="bg-emerald-800 text-white p-3 rounded-xl text-[11px] flex items-center justify-between gap-3 font-medium">
+          <span>💡 <strong>Informasi Tambahan:</strong> File ZIP yang diunduh sudah menyertakan sistem login admin/petugas, enkripsi password PHP yang aman (<code className="font-mono">password_hash</code>), pembagian hak akses, input data lengkap dengan koordinat peta, dan generator laporan Excel/PDF!</span>
+        </div>
       </div>
     </div>
   );
