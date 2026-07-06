@@ -1,0 +1,6 @@
+{
+  "name": "SIAT-MU Kajen",
+  "description": "Sistem Informasi Aset Tanah Muhammadiyah Kajen - Aplikasi pendataan, pemetaan, dan pelaporan aset tanah Muhammadiyah di cabang dan ranting Kajen.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
